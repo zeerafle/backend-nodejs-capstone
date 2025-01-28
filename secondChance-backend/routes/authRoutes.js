@@ -45,7 +45,7 @@ router.post('/register', async (req, res) => {
         res.json({ authtoken, email });
     } catch (e) {
         logger.error(e);
-        return res.status(500).send('Internal server error');
+        return res.status(500).json({ error: 'Internal server error', message: e.message });
     }
 });
 
