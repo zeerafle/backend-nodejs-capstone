@@ -4,6 +4,7 @@ const connectToDatabase = require('../models/db');
 const dotenv = require('dotenv');
 const pino = require('pino');
 const jwt = require('jsonwebtoken');
+const { body, validationResult } = require('express-validator');
 
 dotenv.config();
 const logger = pino();
@@ -52,7 +53,7 @@ router.post('/login', async (req, res) => {
     try {
         const db = await connectToDatabase();
         const collection = db.collection("users");
-        
+
         const user = await collection.findOne({ email: req.body.email });
         if (user) {
             let result = await bcryptjs.compare(req.body.password, user.password)
@@ -71,7 +72,7 @@ router.post('/login', async (req, res) => {
             };
             const authtoken = jwt.sign(payload, JWT_SECRET)
             logger.info('User logged in successfully');
-            return res.status(200).json({authtoken, userName, userEmail});
+            return res.status(200).json({ authtoken, userName, userEmail });
         } else {
             logger.error('User not found');
             return res.status(404).json({ error: 'User not found' });
@@ -80,5 +81,53 @@ router.post('/login', async (req, res) => {
         return res.status(500).json({ error: 'Internal server error', details: e.message });
     }
 });
+
+router.put('/update', async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        logger.error('Validation errors in update request', erros.array());
+        return res.status(400).json({ erros: erros.array() });
+    }
+
+    try {
+        const email = req.headers.email;
+
+        if (!email) {
+            logger.error('Email not found in the request headers');
+            return res.status(400).json({ error: 'Email not found in the request headers' });
+        }
+
+        const db = await connectToDatabase();
+        const collection = db.collection("users");
+
+        const existingUser = await collection.findOne({ email });
+
+        if (!existingUser) {
+            logger.error('User not found');
+            return res.status(400).json({error: 'Not found'});
+        }
+
+        existingUser.updatedAt = new Date();
+        existingUser.firstName = req.body.name;
+
+        const updatedUser = await collection.findOneAndUpdate(
+            { email },
+            { $set: existingUser },
+            { returnDocument: 'after' }
+        );
+
+        const payload = {
+            user: {
+                id: updatedUser._id.toString()
+            }
+        };
+
+        const authtoken = jwt.sign(payload, JWT_SECRET);
+        return res.status(200).json({ authtoken });
+    } catch (e) {
+        logger.error(e);
+        return res.status(500).json({ error: 'Internal server error', message: e.message });
+    }
+})
 
 module.exports = router;
